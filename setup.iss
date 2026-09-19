@@ -14,6 +14,7 @@ Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{
 
 [Files]
 Source: "dist\main.exe"; DestDir: "{app}"; Flags: ignoreversion
+Source: "DejaVuSans.ttf"; DestDir: "{app}"; Flags: ignoreversion
 
 [Icons]
 Name: "{group}\Облік Ремонту"; Filename: "{app}\main.exe"
