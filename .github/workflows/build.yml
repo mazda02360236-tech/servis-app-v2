@@ -29,7 +29,7 @@ jobs:
 
     - name: Build EXE with PyInstaller
       run: |
-        pyinstaller --noconsole --onefile main.py
+        pyinstaller --noconsole --onefile --add-data "DejaVuSans.ttf;." main.py
 
     - name: Build Setup with Inno Setup
       uses: sayyidhaydar/inno-setup-action@v1.0.0
