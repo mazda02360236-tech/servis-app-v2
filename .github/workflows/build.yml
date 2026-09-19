@@ -21,7 +21,11 @@ jobs:
     - name: Install dependencies
       run: |
         python -m pip install --upgrade pip
-        pip install PyQt6 pyinstaller reportlab
+        pip install PyQt6 pyinstaller reportlab requests
+
+    - name: Download Cyrillic Font
+      run: |
+        curl -L -o DejaVuSans.ttf https://raw.githubusercontent.com/dejavu-fonts/dejavu-fonts/master/ttf/DejaVuSans.ttf
 
     - name: Build EXE with PyInstaller
       run: |
