@@ -1,4 +1,4 @@
-name: Build Windows Installer
+name: Створити установщик Windows
 
 on:
   push:
@@ -27,8 +27,13 @@ jobs:
       run: |
         pyinstaller --noconsole --onefile --clean main.py
 
-    - name: Upload EXE Installer Artifact
+    - name: Build Setup with Inno Setup
+      uses: asolutions/inno-setup-action@v1.2.2
+      with:
+        filepath: 'setup.iss'
+
+    - name: Upload Installer Artifact
       uses: actions/upload-artifact@v4
       with:
-        name: Service_Manager_Setup_Windows
-        path: dist/*.exe
+        name: ServiceManager_Setup
+        path: installer_output/ServiceManager_Setup.exe
