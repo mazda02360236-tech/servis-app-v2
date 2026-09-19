@@ -1,0 +1,254 @@
+import sys
+import os
+import sqlite3
+from datetime import datetime
+
+from PyQt6.QtWidgets import (
+    QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
+    QLabel, QLineEdit, QPushButton, QTableWidget, QTableWidgetItem,
+    QMessageBox, QHeaderView, QDateEdit, QTextEdit, QComboBox
+)
+from PyQt6.QtCore import QDate
+
+from reportlab.lib.pagesizes import letter
+from reportlab.pdfgen import canvas
+from reportlab.pdfbase import pdfmetrics
+from reportlab.pdfbase.ttfonts import TTFont
+
+class ServiceManagerApp(QMainWindow):
+    def __init__(self):
+        super().__init__()
+        self.setWindowTitle("Облік ремонту інструменту та обладнання")
+        self.setGeometry(100, 100, 1000, 650)
+        
+        self.init_db()
+        self.init_ui()
+
+    def init_db(self):
+        self.conn = sqlite3.connect("service_orders.db")
+        self.cursor = self.conn.cursor()
+        self.cursor.execute("""
+            CREATE TABLE IF NOT EXISTS orders (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                client_name TEXT,
+                phone TEXT,
+                date_in TEXT,
+                date_out TEXT,
+                item_name TEXT,
+                serial_num TEXT,
+                issue TEXT,
+                status TEXT
+            )
+        """)
+        self.conn.commit()
+
+    def init_ui(self):
+        central_widget = QWidget()
+        self.setCentralWidget(central_widget)
+        main_layout = QVBoxLayout(central_widget)
+
+        # Форма вводу даних
+        form_layout = QVBoxLayout()
+
+        # Рядок 1: Клієнт та Телефон
+        r1 = QHBoxLayout()
+        self.client_input = QLineEdit()
+        self.client_input.setPlaceholderText("ПІБ Клієнта")
+        self.phone_input = QLineEdit()
+        self.phone_input.setPlaceholderText("Телефон клієнта")
+        r1.addWidget(QLabel("Клієнт:"))
+        r1.addWidget(self.client_input)
+        r1.addWidget(QLabel("Телефон:"))
+        r1.addWidget(self.phone_input)
+        form_layout.addLayout(r1)
+
+        # Рядок 2: Найменування та Серійний номер
+        r2 = QHBoxLayout()
+        self.item_input = QLineEdit()
+        self.item_input.setPlaceholderText("Назва товару / інструменту")
+        self.serial_input = QLineEdit()
+        self.serial_input.setPlaceholderText("Серійний номер")
+        r2.addWidget(QLabel("Товар:"))
+        r2.addWidget(self.item_input)
+        r2.addWidget(QLabel("Серійний №:"))
+        r2.addWidget(self.serial_input)
+        form_layout.addLayout(r2)
+
+        # Рядок 3: Дати здачі та видачі
+        r3 = QHBoxLayout()
+        self.date_in_edit = QDateEdit()
+        self.date_in_edit.setDate(QDate.currentDate())
+        self.date_in_edit.setCalendarPopup(True)
+
+        self.date_out_edit = QDateEdit()
+        self.date_out_edit.setDate(QDate.currentDate())
+        self.date_out_edit.setCalendarPopup(True)
+
+        self.status_box = QComboBox()
+        self.status_box.addItems(["В роботі", "Очікує запчастин", "Готово", "Видано"])
+
+        r3.addWidget(QLabel("Дата прийому:"))
+        r3.addWidget(self.date_in_edit)
+        r3.addWidget(QLabel("Дата видачі:"))
+        r3.addWidget(self.date_out_edit)
+        r3.addWidget(QLabel("Статус:"))
+        r3.addWidget(self.status_box)
+        form_layout.addLayout(r3)
+
+        # Рядок 4: Несправність
+        r4 = QHBoxLayout()
+        self.issue_input = QLineEdit()
+        self.issue_input.setPlaceholderText("Опис несправності / виконані роботи")
+        r4.addWidget(QLabel("Несправність:"))
+        r4.addWidget(self.issue_input)
+        form_layout.addLayout(r4)
+
+        main_layout.addLayout(form_layout)
+
+        # Кнопки дій
+        btn_layout = QHBoxLayout()
+        save_btn = QPushButton("Зберегти замовлення")
+        save_btn.clicked.connect(self.save_order)
+        
+        print_btn = QPushButton("Сформувати та роздрукувати квитанцію")
+        print_btn.clicked.connect(self.print_receipt)
+
+        delete_btn = QPushButton("Видалити замовлення")
+        delete_btn.clicked.connect(self.delete_order)
+
+        btn_layout.addWidget(save_btn)
+        btn_layout.addWidget(print_btn)
+        btn_layout.addWidget(delete_btn)
+        main_layout.addLayout(btn_layout)
+
+        # Таблица замовлень
+        self.table = QTableWidget()
+        self.table.setColumnCount(9)
+        self.table.setHorizontalHeaderLabels([
+            "ID", "Клієнт", "Телефон", "Дата прийому", "Дата видачі", 
+            "Товар", "Серійний №", "Несправність", "Статус"
+        ])
+        self.table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
+        self.table.itemSelectionChanged.connect(self.fill_form_from_table)
+        main_layout.addWidget(self.table)
+
+        self.load_orders()
+
+    def save_order(self):
+        client = self.client_input.text().strip()
+        phone = self.phone_input.text().strip()
+        date_in = self.date_in_edit.date().toString("yyyy-MM-dd")
+        date_out = self.date_out_edit.date().toString("yyyy-MM-dd")
+        item = self.item_input.text().strip()
+        serial = self.serial_input.text().strip()
+        issue = self.issue_input.text().strip()
+        status = self.status_box.currentText()
+
+        if not client or not item:
+            QMessageBox.warning(self, "Помилка", "Заповніть обов'язкові поля (Клієнт, Товар)!")
+            return
+
+        self.cursor.execute("""
+            INSERT INTO orders (client_name, phone, date_in, date_out, item_name, serial_num, issue, status)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        """, (client, phone, date_in, date_out, item, serial, issue, status))
+        self.conn.commit()
+
+        self.clear_fields()
+        self.load_orders()
+        QMessageBox.information(self, "Успіх", "Замовлення успішно збережено!")
+
+    def load_orders(self):
+        self.table.setRowCount(0)
+        self.cursor.execute("SELECT * FROM orders")
+        rows = self.cursor.fetchall()
+        for row_idx, row_data in enumerate(rows):
+            self.table.insertRow(row_idx)
+            for col_idx, value in enumerate(row_data):
+                self.table.setItem(row_idx, col_idx, QTableWidgetItem(str(value if value else "")))
+
+    def fill_form_from_table(self):
+        selected_row = self.table.currentRow()
+        if selected_row >= 0:
+            self.client_input.setText(self.table.item(selected_row, 1).text())
+            self.phone_input.setText(self.table.item(selected_row, 2).text())
+            
+            d_in = QDate.fromString(self.table.item(selected_row, 3).text(), "yyyy-MM-dd")
+            if d_in.isValid():
+                self.date_in_edit.setDate(d_in)
+
+            d_out = QDate.fromString(self.table.item(selected_row, 4).text(), "yyyy-MM-dd")
+            if d_out.isValid():
+                self.date_out_edit.setDate(d_out)
+
+            self.item_input.setText(self.table.item(selected_row, 5).text())
+            self.serial_input.setText(self.table.item(selected_row, 6).text())
+            self.issue_input.setText(self.table.item(selected_row, 7).text())
+
+    def clear_fields(self):
+        self.client_input.clear()
+        self.phone_input.clear()
+        self.item_input.clear()
+        self.serial_input.clear()
+        self.issue_input.clear()
+
+    def delete_order(self):
+        selected_row = self.table.currentRow()
+        if selected_row == -1:
+            QMessageBox.warning(self, "Помилка", "Оберіть рядок для видалення!")
+            return
+
+        order_id = self.table.item(selected_row, 0).text()
+        self.cursor.execute("DELETE FROM orders WHERE id = ?", (order_id,))
+        self.conn.commit()
+        self.load_orders()
+        self.clear_fields()
+
+    def print_receipt(self):
+        selected_row = self.table.currentRow()
+        if selected_row == -1:
+            QMessageBox.warning(self, "Помилка", "Оберіть замовлення зі списку для друку!")
+            return
+
+        order_id = self.table.item(selected_row, 0).text()
+        client = self.table.item(selected_row, 1).text()
+        phone = self.table.item(selected_row, 2).text()
+        date_in = self.table.item(selected_row, 3).text()
+        date_out = self.table.item(selected_row, 4).text()
+        item = self.table.item(selected_row, 5).text()
+        serial = self.table.item(selected_row, 6).text()
+        issue = self.table.item(selected_row, 7).text()
+        status = self.table.item(selected_row, 8).text()
+
+        pdf_filename = f"Квитанция_Заказ_{order_id}.pdf"
+        
+        c = canvas.Canvas(pdf_filename, pagesize=letter)
+        c.setFont("Helvetica-Bold", 16)
+        c.drawString(100, 750, f"АКТ-КВИТАНЦІЯ РЕМОНТУ № {order_id}")
+        
+        c.setFont("Helvetica", 12)
+        c.drawString(100, 710, f"Дата прийому: {date_in}   |   Планова дата видачі: {date_out}")
+        c.drawString(100, 680, f"Клієнт: {client}")
+        c.drawString(100, 660, f"Телефон: {phone}")
+        c.drawString(100, 630, f"Товар / Модель: {item}")
+        c.drawString(100, 610, f"Серійний номер: {serial}")
+        c.drawString(100, 580, f"Опис несправності: {issue}")
+        c.drawString(100, 550, f"Поточний статус: {status}")
+
+        c.line(100, 520, 500, 520)
+        c.drawString(100, 480, "Підпис клієнта: __________________")
+        c.drawString(100, 450, "Підпис майстра: __________________")
+
+        c.save()
+
+        # Відкриття створеного PDF файлу для перегляду та друку
+        if sys.platform == "win32":
+            os.startfile(pdf_filename)
+        else:
+            QMessageBox.information(self, "Успіх", f"Квитанцію збережено в файл {pdf_filename}")
+
+if __name__ == "__main__":
+    app = QApplication(sys.argv)
+    window = ServiceManagerApp()
+    window.show()
+    sys.exit(app.exec())
