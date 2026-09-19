@@ -17,11 +17,11 @@ from reportlab.pdfbase import pdfmetrics
 from reportlab.pdfbase.ttfonts import TTFont
 
 def setup_cyrillic_font():
-    """Скачивает и регистрирует шрифт DejaVuSans для корректного отображения кириллицы в PDF."""
+    """Завантажує та реєструє шрифт DejaVuSans для коректного відображення кирилиці в PDF."""
     font_path = "DejaVuSans.ttf"
     if not os.path.exists(font_path):
         try:
-            url = "https://github.com/dejavu-fonts/dejavu-fonts/raw/master/ttf/DejaVuSans.ttf"
+            url = "https://raw.githubusercontent.com/dejavu-fonts/dejavu-fonts/master/ttf/DejaVuSans.ttf"
             urllib.request.urlretrieve(url, font_path)
         except Exception:
             pass
